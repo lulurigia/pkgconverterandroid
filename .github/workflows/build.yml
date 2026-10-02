@@ -8,63 +8,47 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Create Android project
+      - name: Download repository
+        uses: actions/checkout@v4
+
+      - name: Extract Android project
         run: |
-          mkdir -p app/src/main/java/com/pkgconverter
-          mkdir -p app/src/main/res/values
+          mkdir project
+          unzip -q PKGConverterAndroid.zip -d project
+          echo "Project contents:"
+          find project -maxdepth 3 -type f | head -50
 
-          cat > settings.gradle <<'EOF'
-          pluginManagement {
-              repositories {
-                  google()
-                  mavenCentral()
-                  gradlePluginPortal()
-              }
-          }
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
 
-          dependencyResolutionManagement {
-              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-          }
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
 
-          rootProject.name = "PKGConverter"
-          include(":app")
-          EOF
+      - name: Install Android SDK
+        run: |
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
-          cat > build.gradle <<'EOF'
-          plugins {
-              id 'com.android.application' version '8.7.3' apply false
-          }
-          EOF
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
 
-          cat > app/build.gradle <<'EOF'
-          plugins {
-              id 'com.android.application'
-          }
+      - name: Find Android project
+        run: |
+          SETTINGS=$(find project -name settings.gradle -o -name settings.gradle.kts | head -1)
+          PROJECT_DIR=$(dirname "$SETTINGS")
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "Found project at: $PROJECT_DIR"
 
-          android {
-              namespace 'com.pkgconverter'
-              compileSdk 35
+      - name: Build APK
+        run: |
+          gradle -p "$PROJECT_DIR" assembleDebug
 
-              defaultConfig {
-                  applicationId 'com.pkgconverter'
-                  minSdk 26
-                  targetSdk 35
-                  versionCode 1
-                  versionName '1.0'
-              }
-          }
-          EOF
-
-          cat > app/src/main/AndroidManifest.xml <<'EOF'
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-              <application
-                  android:theme="@style/AppTheme"
-                  android:label="PKG Converter"
-                  android:allowBackup="false"
-                  android:supportsRtl="true">
-
-                 
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: PKG-Converter-APK
+          path: "${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/*.apk"
