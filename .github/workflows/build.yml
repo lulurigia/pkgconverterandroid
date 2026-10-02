@@ -9,7 +9,6 @@ jobs:
 
     steps:
       - name: Create Android project
-        shell: bash
         run: |
           mkdir -p app/src/main/java/com/pkgconverter
           mkdir -p app/src/main/res/values
@@ -62,28 +61,10 @@ jobs:
 
           cat > app/src/main/AndroidManifest.xml <<'EOF'
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-
               <application
                   android:theme="@style/AppTheme"
                   android:label="PKG Converter"
                   android:allowBackup="false"
                   android:supportsRtl="true">
 
-                  <activity
-                      android:name=".MainActivity"
-                      android:exported="true">
-
-                      <intent-filter>
-                          <action android:name="android.intent.action.MAIN" />
-                          <category android:name="android.intent.category.LAUNCHER" />
-                      </intent-filter>
-
-                  </activity>
-              </application>
-
-          </manifest>
-          EOF
-
-          cat > app/src/main/res/values/styles.xml <<'EOF'
-          <resources>
-              <style name="AppTheme" parent="android:
+                 
