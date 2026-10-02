@@ -10,14 +10,36 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build Android app
+      - name: Extract project
         run: |
+          rm -rf project
+          mkdir project
           unzip -q PKGConverterAndroid.zip -d project
-          cd project
-          gradle assembleDebug
+
+      - name: Find project
+        run: |
+          PROJECT_DIR=$(find project -name settings.gradle -o -name settings.gradle.kts | head -1 | xargs dirname)
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "platforms;android-35" \
+            "build-tools;35.0.0"
+
+      - name: Build
+        run: |
+          gradle -p "$PROJECT_DIR" assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: PKG-Converter-APK
-          path: "project/**/build/outputs/apk/debug/*.apk"
+          path: "${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/*.apk"
