@@ -21,6 +21,11 @@ jobs:
           PROJECT_DIR=$(find project -name settings.gradle -o -name settings.gradle.kts | head -1 | xargs dirname)
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
+      - name: Fix theme
+        run: |
+          find project -name styles.xml -exec sed -i \
+            's/Theme.Material.DayNight.NoActionBar/Theme.Material.NoActionBar/g' {} \;
+
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
