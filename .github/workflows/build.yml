@@ -55,17 +55,15 @@ jobs:
           cp "$ROOT/ps4ffpsc.toml" \
             "$PROJECT_DIR/app/src/main/python/backend/"
 
-          mkdir -p "$PROJECT_DIR/third_party"
-          rm -rf "$PROJECT_DIR/third_party/mkpfs"
+          echo "PS4 Python backend copied."
 
-          if [ -d "$ROOT/third_party/mkpfs" ]; then
-            cp -r "$ROOT/third_party/mkpfs" \
-              "$PROJECT_DIR/third_party/mkpfs"
-          else
-            echo "WARNING: mkpfs directory not found"
-          fi
+      - name: Use MkPFS Python package
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          sed -i "s#install './third_party/mkpfs'#install 'mkpfs'#" app/build.gradle
 
-          echo "PS4 Python backend copied successfully."
+          echo "Updated Chaquopy dependencies:"
+          cat app/build.gradle
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -81,7 +79,6 @@ jobs:
       - name: Verify Python
         run: |
           python3.13 --version
-          python3 --version
 
       - name: Setup Android SDK
         run: |
@@ -96,8 +93,10 @@ jobs:
         run: |
           chmod +x gradlew 2>/dev/null || true
 
-          echo "Building with:"
+          echo "Python:"
           python3.13 --version
+
+          echo "Gradle:"
           gradle --version
 
           gradle assembleDebug --stacktrace
