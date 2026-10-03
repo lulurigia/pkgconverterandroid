@@ -14,26 +14,39 @@ jobs:
       - name: Extract Android project
         run: |
           rm -rf project
-          mkdir project
+          mkdir -p project
           unzip -q PKGConverterAndroid_REAL.zip -d project
 
-      - name: Locate project
+      - name: Locate Android project
         run: |
           PROJECT_DIR=$(find project -name settings.gradle -print -quit | xargs dirname)
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-          echo "Project: $PROJECT_DIR"
+          echo "Android project: $PROJECT_DIR"
 
       - name: Extract PS4 backend
         run: |
+          rm -rf ps4backend
           mkdir -p ps4backend
+
           unzip -q PS4pkg_to_ffpfsc-0.2.9.zip -d ps4backend
 
           ROOT=$(find ps4backend -name ps4ffpsc.toml -print -quit | xargs dirname)
-          echo "PS4 backend: $ROOT"
 
-          cp -r "$ROOT/ps4ffpsc" "$PROJECT_DIR/app/src/main/python/"
+          echo "PS4 backend root: $ROOT"
+
+          if [ -z "$ROOT" ]; then
+            echo "ERROR: Could not find ps4ffpsc.toml"
+            exit 1
+          fi
+
+          mkdir -p "$PROJECT_DIR/app/src/main/python/backend"
+
+          rm -rf "$PROJECT_DIR/app/src/main/python/ps4ffpsc"
+          cp -r "$ROOT/ps4ffpsc" \
+            "$PROJECT_DIR/app/src/main/python/"
+
           cp "$ROOT/ps4ffpsc.toml" \
-             "$PROJECT_DIR/app/src/main/python/backend/"
+            "$PROJECT_DIR/app/src/main/python/backend/"
 
           mkdir -p "$PROJECT_DIR/third_party"
           rm -rf "$PROJECT_DIR/third_party/mkpfs"
@@ -41,7 +54,11 @@ jobs:
           if [ -d "$ROOT/third_party/mkpfs" ]; then
             cp -r "$ROOT/third_party/mkpfs" \
               "$PROJECT_DIR/third_party/mkpfs"
+          else
+            echo "WARNING: mkpfs directory not found in backend"
           fi
+
+          echo "PS4 Python backend copied successfully."
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -52,6 +69,7 @@ jobs:
       - name: Setup Android SDK
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses || true
+
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
             "platforms;android-35" \
             "build-tools;35.0.0"
@@ -67,3 +85,4 @@ jobs:
         with:
           name: PKG-Converter-APK
           path: "${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/*.apk"
+          if-no-files-found: error
