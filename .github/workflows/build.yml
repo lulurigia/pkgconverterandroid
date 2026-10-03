@@ -8,23 +8,40 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Extract project
+      - name: Extract Android project
         run: |
           rm -rf project
           mkdir project
-          unzip -q PKGConverterAndroid.zip -d project
+          unzip -q PKGConverterAndroid_REAL.zip -d project
 
-      - name: Find project
+      - name: Locate project
         run: |
-          PROJECT_DIR=$(find project -name settings.gradle -o -name settings.gradle.kts | head -1 | xargs dirname)
+          PROJECT_DIR=$(find project -name settings.gradle -print -quit | xargs dirname)
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "Project: $PROJECT_DIR"
 
-      - name: Fix theme
+      - name: Extract PS4 backend
         run: |
-          find project -name styles.xml -exec sed -i \
-            's/Theme.Material.DayNight.NoActionBar/Theme.Material.NoActionBar/g' {} \;
+          mkdir -p ps4backend
+          unzip -q PS4pkg_to_ffpfsc-0.2.9.zip -d ps4backend
+
+          ROOT=$(find ps4backend -name ps4ffpsc.toml -print -quit | xargs dirname)
+          echo "PS4 backend: $ROOT"
+
+          cp -r "$ROOT/ps4ffpsc" "$PROJECT_DIR/app/src/main/python/"
+          cp "$ROOT/ps4ffpsc.toml" \
+             "$PROJECT_DIR/app/src/main/python/backend/"
+
+          mkdir -p "$PROJECT_DIR/third_party"
+          rm -rf "$PROJECT_DIR/third_party/mkpfs"
+
+          if [ -d "$ROOT/third_party/mkpfs" ]; then
+            cp -r "$ROOT/third_party/mkpfs" \
+              "$PROJECT_DIR/third_party/mkpfs"
+          fi
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -39,9 +56,11 @@ jobs:
             "platforms;android-35" \
             "build-tools;35.0.0"
 
-      - name: Build
+      - name: Build APK
+        working-directory: ${{ env.PROJECT_DIR }}
         run: |
-          gradle -p "$PROJECT_DIR" assembleDebug
+          chmod +x gradlew 2>/dev/null || true
+          gradle assembleDebug --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
