@@ -15,6 +15,7 @@ jobs:
         run: |
           rm -rf project
           mkdir -p project
+
           unzip -q PKGConverterAndroid_REAL.zip -d project
 
       - name: Locate Android project
@@ -27,7 +28,9 @@ jobs:
           fi
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-          echo "Android project: $PROJECT_DIR"
+
+          echo "Android project:"
+          echo "$PROJECT_DIR"
 
       - name: Extract PS4 backend
         run: |
@@ -43,7 +46,8 @@ jobs:
             exit 1
           fi
 
-          echo "PS4 backend root: $ROOT"
+          echo "PS4 backend root:"
+          echo "$ROOT"
 
           mkdir -p "$PROJECT_DIR/app/src/main/python/backend"
 
@@ -57,13 +61,64 @@ jobs:
 
           echo "PS4 Python backend copied."
 
-      - name: Use MkPFS Python package
+      - name: Download MkPFS source
+        run: |
+          rm -rf mkpfs-source
+
+          git clone --depth 1 --branch 1.0.0 \
+            https://github.com/PSBrew/MkPFS.git \
+            mkpfs-source
+
+          if [ ! -d "mkpfs-source/mkpfs" ]; then
+            echo "ERROR: MkPFS source directory was not found."
+            exit 1
+          fi
+
+          echo "MkPFS source downloaded."
+
+      - name: Prepare Android MkPFS package
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
-          sed -i "s#install './third_party/mkpfs'#install 'mkpfs'#" app/build.gradle
+          rm -rf third_party/mkpfs
+          mkdir -p third_party/mkpfs
 
-          echo "Updated Chaquopy dependencies:"
-          cat app/build.gradle
+          cp -r "$GITHUB_WORKSPACE/mkpfs-source/mkpfs" \
+            third_party/mkpfs/
+
+          cat > third_party/mkpfs/pyproject.toml <<'EOF'
+          [build-system]
+          requires = ["hatchling<1.32"]
+          build-backend = "hatchling.build"
+
+          [project]
+          name = "mkpfs"
+          version = "1.0.0"
+          requires-python = ">=3.9"
+
+          dependencies = [
+            "cryptography>=47.0.0",
+            "zlib-ng>=0.5.1",
+            "isal>=1.0.0; platform_machine == 'x86_64' or platform_machine == 'AMD64' or platform_machine == 'aarch64' or platform_machine == 'arm64'"
+          ]
+
+          [project.scripts]
+          mkpfs = "mkpfs.cli:main"
+
+          [tool.hatch.build.targets.wheel]
+          packages = ["mkpfs"]
+          EOF
+
+          echo "Prepared Android MkPFS package:"
+          find third_party/mkpfs -maxdepth 2 -type f | sort
+
+      - name: Verify MkPFS package
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          test -f third_party/mkpfs/mkpfs/__init__.py
+          test -f third_party/mkpfs/mkpfs/cli.py
+          test -f third_party/mkpfs/pyproject.toml
+
+          echo "MkPFS package structure OK."
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -99,7 +154,21 @@ jobs:
           echo "Gradle:"
           gradle --version
 
+          echo "Starting Android build..."
+
           gradle assembleDebug --stacktrace
+
+      - name: Check APK
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          echo "APK files produced:"
+
+          find app/build/outputs/apk/debug \
+            -type f \
+            -name "*.apk" \
+            -print
+
+          test -n "$(find app/build/outputs/apk/debug -type f -name '*.apk' -print -quit)"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
