@@ -8,8 +8,18 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+
+      # ------------------------------------------------------------
+      # SOURCE
+      # ------------------------------------------------------------
+
+      - name: Checkout repository
         uses: actions/checkout@v4
+
+
+      # ------------------------------------------------------------
+      # ANDROID PROJECT
+      # ------------------------------------------------------------
 
       - name: Extract Android project
         run: |
@@ -23,7 +33,7 @@ jobs:
           PROJECT_DIR=$(find project -name settings.gradle -print -quit | xargs dirname)
 
           if [ -z "$PROJECT_DIR" ]; then
-            echo "ERROR: Android project not found"
+            echo "ERROR: Android project was not found."
             exit 1
           fi
 
@@ -31,6 +41,11 @@ jobs:
 
           echo "Android project:"
           echo "$PROJECT_DIR"
+
+
+      # ------------------------------------------------------------
+      # PS4 PYTHON BACKEND
+      # ------------------------------------------------------------
 
       - name: Extract PS4 backend
         run: |
@@ -42,7 +57,7 @@ jobs:
           ROOT=$(find ps4backend -name ps4ffpsc.toml -print -quit | xargs dirname)
 
           if [ -z "$ROOT" ]; then
-            echo "ERROR: Could not find ps4ffpsc.toml"
+            echo "ERROR: ps4ffpsc.toml was not found."
             exit 1
           fi
 
@@ -61,79 +76,97 @@ jobs:
 
           echo "PS4 Python backend copied."
 
-      - name: Download MkPFS source
+
+      # ------------------------------------------------------------
+      # MKPFS
+      # ------------------------------------------------------------
+
+      - name: Download MkPFS
         run: |
           rm -rf mkpfs-source
 
-          git clone --depth 1 --branch 1.0.0 \
+          git clone --depth 1 \
             https://github.com/PSBrew/MkPFS.git \
             mkpfs-source
 
           if [ ! -d "mkpfs-source/mkpfs" ]; then
-            echo "ERROR: MkPFS source directory was not found."
+            echo "ERROR: MkPFS Python package was not found."
             exit 1
           fi
 
           echo "MkPFS source downloaded."
 
-      - name: Prepare Android MkPFS package
+
+      - name: Bundle MkPFS directly into Python
+        run: |
+          rm -rf "$PROJECT_DIR/app/src/main/python/mkpfs"
+
+          cp -r \
+            mkpfs-source/mkpfs \
+            "$PROJECT_DIR/app/src/main/python/mkpfs"
+
+          echo "MkPFS bundled into Android Python source."
+
+          find "$PROJECT_DIR/app/src/main/python/mkpfs" \
+            -maxdepth 2 \
+            -type f \
+            | sort
+
+
+      # ------------------------------------------------------------
+      # FIX ANDROID GRADLE DEPENDENCIES
+      # ------------------------------------------------------------
+
+      - name: Remove local MkPFS pip dependency
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
-          rm -rf third_party/mkpfs
-          mkdir -p third_party/mkpfs
+          python3 - <<'PY'
+          from pathlib import Path
 
-          cp -r "$GITHUB_WORKSPACE/mkpfs-source/mkpfs" \
-            third_party/mkpfs/
+          p = Path("app/build.gradle")
 
-          cat > third_party/mkpfs/pyproject.toml <<'EOF'
-          [build-system]
-          requires = ["hatchling<1.32"]
-          build-backend = "hatchling.build"
+          text = p.read_text()
 
-          [project]
-          name = "mkpfs"
-          version = "1.0.0"
-          requires-python = ">=3.9"
+          old = "            install './third_party/mkpfs'\n"
 
-          dependencies = [
-            "cryptography>=47.0.0",
-            "zlib-ng>=0.5.1",
-            "isal>=1.0.0; platform_machine == 'x86_64' or platform_machine == 'AMD64' or platform_machine == 'aarch64' or platform_machine == 'arm64'"
-          ]
+          if old in text:
+              text = text.replace(old, "")
 
-          [project.scripts]
-          mkpfs = "mkpfs.cli:main"
+          p.write_text(text)
 
-          [tool.hatch.build.targets.wheel]
-          packages = ["mkpfs"]
-          EOF
+          print("Updated app/build.gradle:")
+          print(p.read_text())
+          PY
 
-          echo "Prepared Android MkPFS package:"
-          find third_party/mkpfs -maxdepth 2 -type f | sort
 
-      - name: Verify MkPFS package
-        working-directory: ${{ env.PROJECT_DIR }}
-        run: |
-          test -f third_party/mkpfs/mkpfs/__init__.py
-          test -f third_party/mkpfs/mkpfs/cli.py
-          test -f third_party/mkpfs/pyproject.toml
-
-          echo "MkPFS package structure OK."
+      # ------------------------------------------------------------
+      # JAVA
+      # ------------------------------------------------------------
 
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: "17"
+
+
+      # ------------------------------------------------------------
+      # PYTHON
+      # ------------------------------------------------------------
 
       - name: Setup Python 3.13
         uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          python-version: "3.13"
 
       - name: Verify Python
         run: |
           python3.13 --version
+
+
+      # ------------------------------------------------------------
+      # ANDROID SDK
+      # ------------------------------------------------------------
 
       - name: Setup Android SDK
         run: |
@@ -142,6 +175,30 @@ jobs:
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
             "platforms;android-35" \
             "build-tools;35.0.0"
+
+
+      # ------------------------------------------------------------
+      # VERIFY PYTHON SOURCE
+      # ------------------------------------------------------------
+
+      - name: Verify bundled Python packages
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          test -f app/src/main/python/mkpfs/__init__.py
+          test -f app/src/main/python/ps4ffpsc/__init__.py
+
+          echo "Python packages found."
+
+          echo "MkPFS:"
+          ls app/src/main/python/mkpfs
+
+          echo "PS4 backend:"
+          ls app/src/main/python/ps4ffpsc
+
+
+      # ------------------------------------------------------------
+      # BUILD
+      # ------------------------------------------------------------
 
       - name: Build APK
         working-directory: ${{ env.PROJECT_DIR }}
@@ -158,17 +215,39 @@ jobs:
 
           gradle assembleDebug --stacktrace
 
+
+      # ------------------------------------------------------------
+      # VERIFY APK
+      # ------------------------------------------------------------
+
       - name: Check APK
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
-          echo "APK files produced:"
+          echo "APK files:"
 
           find app/build/outputs/apk/debug \
             -type f \
             -name "*.apk" \
             -print
 
-          test -n "$(find app/build/outputs/apk/debug -type f -name '*.apk' -print -quit)"
+          APK=$(find app/build/outputs/apk/debug \
+            -type f \
+            -name "*.apk" \
+            -print \
+            -quit)
+
+          if [ -z "$APK" ]; then
+            echo "ERROR: No APK was produced."
+            exit 1
+          fi
+
+          echo "APK successfully produced:"
+          echo "$APK"
+
+
+      # ------------------------------------------------------------
+      # ARTIFACT
+      # ------------------------------------------------------------
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
