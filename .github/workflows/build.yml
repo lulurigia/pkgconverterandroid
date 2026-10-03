@@ -20,6 +20,12 @@ jobs:
       - name: Locate Android project
         run: |
           PROJECT_DIR=$(find project -name settings.gradle -print -quit | xargs dirname)
+
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "ERROR: Android project not found"
+            exit 1
+          fi
+
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
           echo "Android project: $PROJECT_DIR"
 
@@ -32,16 +38,17 @@ jobs:
 
           ROOT=$(find ps4backend -name ps4ffpsc.toml -print -quit | xargs dirname)
 
-          echo "PS4 backend root: $ROOT"
-
           if [ -z "$ROOT" ]; then
             echo "ERROR: Could not find ps4ffpsc.toml"
             exit 1
           fi
 
+          echo "PS4 backend root: $ROOT"
+
           mkdir -p "$PROJECT_DIR/app/src/main/python/backend"
 
           rm -rf "$PROJECT_DIR/app/src/main/python/ps4ffpsc"
+
           cp -r "$ROOT/ps4ffpsc" \
             "$PROJECT_DIR/app/src/main/python/"
 
@@ -55,7 +62,7 @@ jobs:
             cp -r "$ROOT/third_party/mkpfs" \
               "$PROJECT_DIR/third_party/mkpfs"
           else
-            echo "WARNING: mkpfs directory not found in backend"
+            echo "WARNING: mkpfs directory not found"
           fi
 
           echo "PS4 Python backend copied successfully."
@@ -65,6 +72,16 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+
+      - name: Setup Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Verify Python
+        run: |
+          python3.13 --version
+          python3 --version
 
       - name: Setup Android SDK
         run: |
@@ -78,6 +95,11 @@ jobs:
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
           chmod +x gradlew 2>/dev/null || true
+
+          echo "Building with:"
+          python3.13 --version
+          gradle --version
+
           gradle assembleDebug --stacktrace
 
       - name: Upload APK
