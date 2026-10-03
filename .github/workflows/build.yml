@@ -89,28 +89,53 @@ jobs:
             https://github.com/PSBrew/MkPFS.git \
             mkpfs-source
 
-          if [ ! -d "mkpfs-source/mkpfs" ]; then
-            echo "ERROR: MkPFS Python package was not found."
+          echo "MkPFS repository contents:"
+          ls -la mkpfs-source
+
+          echo "MkPFS package contents:"
+          ls -la mkpfs-source/mkpfs
+
+          if [ ! -f "mkpfs-source/mkpfs/__init__.py" ]; then
+            echo "ERROR: MkPFS source package is missing __init__.py"
             exit 1
           fi
 
-          echo "MkPFS source downloaded."
+          echo "MkPFS source verified."
 
+
+      # ------------------------------------------------------------
+      # BUNDLE MKPFS
+      # ------------------------------------------------------------
 
       - name: Bundle MkPFS directly into Python
         run: |
-          rm -rf "$PROJECT_DIR/app/src/main/python/mkpfs"
+          DEST="$PROJECT_DIR/app/src/main/python/mkpfs"
 
-          cp -r \
-            mkpfs-source/mkpfs \
-            "$PROJECT_DIR/app/src/main/python/mkpfs"
+          rm -rf "$DEST"
 
-          echo "MkPFS bundled into Android Python source."
+          mkdir -p "$DEST"
 
-          find "$PROJECT_DIR/app/src/main/python/mkpfs" \
-            -maxdepth 2 \
-            -type f \
-            | sort
+          echo "Copying MkPFS Python package..."
+
+          cp -r mkpfs-source/mkpfs/. "$DEST/"
+
+          echo ""
+          echo "Destination contents:"
+          ls -la "$DEST"
+
+          echo ""
+          echo "Checking __init__.py..."
+
+          if [ ! -f "$DEST/__init__.py" ]; then
+            echo "ERROR: __init__.py was not copied."
+            echo "Source:"
+            find mkpfs-source/mkpfs -maxdepth 1 -type f -print
+            echo "Destination:"
+            find "$DEST" -maxdepth 1 -type f -print
+            exit 1
+          fi
+
+          echo "MkPFS successfully bundled."
 
 
       # ------------------------------------------------------------
@@ -184,16 +209,30 @@ jobs:
       - name: Verify bundled Python packages
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
+          echo "Checking MkPFS..."
+
           test -f app/src/main/python/mkpfs/__init__.py
+
+          echo "Checking PS4 backend..."
+
           test -f app/src/main/python/ps4ffpsc/__init__.py
 
-          echo "Python packages found."
+          echo ""
+          echo "Python packages found successfully."
 
+          echo ""
           echo "MkPFS:"
-          ls app/src/main/python/mkpfs
+          find app/src/main/python/mkpfs \
+            -maxdepth 2 \
+            -type f \
+            | sort
 
+          echo ""
           echo "PS4 backend:"
-          ls app/src/main/python/ps4ffpsc
+          find app/src/main/python/ps4ffpsc \
+            -maxdepth 2 \
+            -type f \
+            | sort
 
 
       # ------------------------------------------------------------
@@ -208,9 +247,11 @@ jobs:
           echo "Python:"
           python3.13 --version
 
+          echo ""
           echo "Gradle:"
           gradle --version
 
+          echo ""
           echo "Starting Android build..."
 
           gradle assembleDebug --stacktrace
@@ -241,6 +282,7 @@ jobs:
             exit 1
           fi
 
+          echo ""
           echo "APK successfully produced:"
           echo "$APK"
 
